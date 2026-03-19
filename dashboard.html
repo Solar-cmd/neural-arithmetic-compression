@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>neural-arithmetic-compress</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --border-bright: #2e2e4e;
+    --accent: #7c6aff;
+    --accent2: #ff6a9b;
+    --green: #3dffb0;
+    --yellow: #ffd700;
+    --red: #ff4d6d;
+    --text: #e2e2f0;
+    --muted: #6b6b8a;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,255,255,0.012) 2px,
+      rgba(255,255,255,0.012) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.95);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    border: 1px solid var(--border-bright);
+    color: var(--muted);
+  }
+
+  .badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .badge.running { border-color: var(--green); color: var(--green); }
+  .badge.running .dot { background: var(--green); animation: pulse 1s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 57px);
+  }
+
+  .panel {
+    background: var(--bg);
+    padding: 20px;
+    overflow: auto;
+  }
+
+  .panel-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Metrics cards ── */
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    transition: border-color 0.2s;
+  }
+
+  .metric-card:hover { border-color: var(--border-bright); }
+
+  .metric-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-family: var(--display);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .metric-value.win { color: var(--green); }
+  .metric-value.lose { color: var(--accent2); }
+  .metric-sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Text input ── */
+  .input-section { margin-bottom: 16px; }
+
+  .input-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+
+  .input-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  select, input[type="text"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+    flex: 1;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  textarea#input-text {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 12px;
+    resize: vertical;
+    min-height: 140px;
+    max-height: 300px;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.2s;
+  }
+
+  textarea#input-text:focus { border-color: var(--accent); }
+
+  .char-count {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 4px;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 8px 18px;
+    border-radius: 5px;
+    border: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 500;
+  }
+
+  .btn-primary:hover { background: #9580ff; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+
+  .btn-danger:hover { background: var(--red); color: #fff; }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--muted);
+  }
+
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+  .run-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    margin: 12px 0;
+    display: none;
+  }
+
+  .progress-wrap.visible { display: block; }
+
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  /* ── Right column tabs ── */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    background: var(--surface);
+    gap: 0;
+  }
+
+  .tab {
+    padding: 12px 18px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: var(--mono);
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    display: none;
+  }
+
+  .tab-content.active { display: block; }
+
+  /* ── Terminal ── */
+  #terminal {
+    background: #050508;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    min-height: 400px;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+    color: #c8c8e0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .term-line { display: block; }
+  .term-line.info { color: #7c6aff; }
+  .term-line.success { color: var(--green); }
+  .term-line.error { color: var(--red); }
+  .term-line.warn { color: var(--yellow); }
+  .term-line.result { color: var(--accent2); font-weight: 500; }
+  .term-line.dim { color: var(--muted); }
+
+  .term-prompt {
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  .terminal-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  /* ── Charts ── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .chart-title {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .chart-card canvas { max-height: 200px; }
+
+  /* ── History table ── */
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .history-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .history-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .history-table tr:hover td { background: var(--surface); }
+
+  .history-table .best { color: var(--green); font-weight: 500; }
+  .history-table .worst { color: var(--red); }
+
+  .pass-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .pass-badge.pass { background: rgba(61,255,176,0.12); color: var(--green); }
+  .pass-badge.fail { background: rgba(255,77,109,0.12); color: var(--red); }
+
+  /* ── Comparison bars ── */
+  .compare-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .compare-label {
+    width: 90px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .compare-bar-wrap {
+    flex: 1;
+    height: 20px;
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .compare-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .bar-llm { background: linear-gradient(90deg, var(--accent), #9580ff); }
+  .bar-zlib { background: #2a2a3e; color: var(--muted); }
+  .bar-zstd { background: #1e2a3e; color: var(--muted); }
+
+  /* ── Presets ── */
+  .preset-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .preset-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-bright);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .preset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 2;
+  }
+
+  .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">neural-arithmetic-compress</div>
+  <div class="header-meta">
+    <div class="badge" id="model-badge"><span class="dot"></span>distilgpt2 · 82M</div>
+    <div class="badge" id="status-badge"><span class="dot"></span>idle</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="panel" style="grid-row: 1 / 3;">
+
+    <div class="panel-label">metrics</div>
+
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-label">LLM+zstd ratio</div>
+        <div class="metric-value" id="m-ratio">—</div>
+        <div class="metric-sub" id="m-ratio-sub">last run</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">vs zlib</div>
+        <div class="metric-value" id="m-delta">—</div>
+        <div class="metric-sub" id="m-delta-sub">delta</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">compress speed</div>
+        <div class="metric-value" id="m-ctps">—</div>
+        <div class="metric-sub">tok/sec</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">decompress speed</div>
+        <div class="metric-value" id="m-dtps">—</div>
+        <div class="metric-sub">tok/sec</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">tokens</div>
+        <div class="metric-value" id="m-tokens">—</div>
+        <div class="metric-sub">input tokens</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">lossless</div>
+        <div class="metric-value" id="m-pass">—</div>
+        <div class="metric-sub">verification</div>
+      </div>
+    </div>
+
+    <!-- comparison bars -->
+    <div class="panel-label" style="margin-top:8px;">compression ratio</div>
+    <div id="compare-bars">
+      <div class="compare-row">
+        <div class="compare-label">LLM+zstd</div>
+        <div class="compare-bar-wrap">
+          <div class="compare-bar bar-llm" id="bar-llm" style="width:0%">—</div>
+        </div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-label">zstd only</div>
+        <div class="compare-bar-wrap">
+          <div class="compare-bar bar-zstd" id="bar-zstd" style="width:0%">—</div>
+        </div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-label">zlib</div>
+        <div class="compare-bar-wrap">
+          <div class="compare-bar bar-zlib" id="bar-zlib" style="width:0%">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-label" style="margin-top:20px;">run benchmark</div>
+
+    <div class="input-section">
+      <div class="input-row">
+        <span class="input-label">label</span>
+        <input type="text" id="run-label" value="custom" placeholder="run label">
+      </div>
+
+      <div class="preset-row" id="presets">
+        <button class="preset-btn" data-preset="prose">prose</button>
+        <button class="preset-btn" data-preset="code">python</button>
+        <button class="preset-btn" data-preset="json">json</button>
+        <button class="preset-btn" data-preset="repeat">repetitive</button>
+      </div>
+
+      <textarea id="input-text" placeholder="Enter text to compress...">The quick brown fox jumps over the lazy dog. This is a classic pangram that contains every letter of the English alphabet at least once. It is often used for testing fonts and keyboards because it displays all characters in a short, memorable phrase. The sentence has been used since the late 19th century and continues to be popular today for various applications including typing practice and font previews.</textarea>
+      <div class="char-count" id="char-count">0 chars</div>
+    </div>
+
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-info">
+        <span id="progress-phase">compressing</span>
+        <span id="progress-tps">— tok/s</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="run-controls">
+      <button class="btn btn-primary" id="run-btn" onclick="startRun()">▶ run</button>
+      <button class="btn btn-danger" id="stop-btn" onclick="stopRun()" style="display:none">■ stop</button>
+      <button class="btn btn-ghost" onclick="clearTerminal()">clear log</button>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT TOP: TABS ── -->
+  <div class="right-col" style="grid-row: 1 / 3;">
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('terminal', this)">terminal</button>
+      <button class="tab" onclick="switchTab('charts', this)">charts</button>
+      <button class="tab" onclick="switchTab('history', this)">history</button>
+    </div>
+
+    <!-- Terminal tab -->
+    <div class="tab-content active" id="tab-terminal">
+      <div class="terminal-toolbar">
+        <div class="panel-label" style="margin:0">output</div>
+        <button class="btn btn-ghost" onclick="scrollTerminalBottom()" style="padding:4px 10px;font-size:10px">↓ bottom</button>
+      </div>
+      <div id="terminal"><span class="term-line dim">// terminal ready. run a benchmark to see output.</span>
+</div>
+    </div>
+
+    <!-- Charts tab -->
+    <div class="tab-content" id="tab-charts">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">compression ratio over time</div>
+          <canvas id="chart-ratio"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">tokens/sec over time</div>
+          <canvas id="chart-tps"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">llm+zstd vs zlib (last 10)</div>
+          <canvas id="chart-compare"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">size reduction (bytes)</div>
+          <canvas id="chart-bytes"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- History tab -->
+    <div class="tab-content" id="tab-history">
+      <div id="history-container">
+        <div class="empty"><div class="empty-icon">◈</div>No runs yet.<br>Run a benchmark to see history.</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// ── Presets ────────────────────────────────────────────────────────────────
+
+const PRESETS = {
+  prose: `The quick brown fox jumps over the lazy dog. This is a classic pangram that contains every letter of the English alphabet at least once. It is often used for testing fonts and keyboards because it displays all characters in a short, memorable phrase. The sentence has been used since the late 19th century and continues to be popular today for various applications including typing practice and font previews. In addition to its practical uses, pangrams like this one are simply fun to read and demonstrate the flexibility and richness of the English language.`,
+
+  code: `def fibonacci(n):
+    if n <= 0:
+        return []
+    elif n == 1:
+        return [0]
+    elif n == 2:
+        return [0, 1]
+    seq = [0, 1]
+    for i in range(2, n):
+        seq.append(seq[i-1] + seq[i-2])
+    return seq
+
+def factorial(n):
+    if n == 0 or n == 1:
+        return 1
+    result = 1
+    for i in range(2, n + 1):
+        result *= i
+    return result
+
+class Calculator:
+    def __init__(self):
+        self.history = []
+    def add(self, a, b):
+        result = a + b
+        self.history.append(f"added {a} + {b} = {result}")
+        return result`,
+
+  json: `{
+  "users": [
+    {"id": 1, "name": "Alice", "email": "alice@example.com", "active": true},
+    {"id": 2, "name": "Bob", "email": "bob@example.com", "active": false},
+    {"id": 3, "name": "Charlie", "email": "charlie@example.com", "active": true},
+    {"id": 4, "name": "Diana", "email": "diana@example.com", "active": true}
+  ],
+  "products": [
+    {"id": 101, "name": "Widget", "price": 19.99, "in_stock": true},
+    {"id": 102, "name": "Gadget", "price": 29.99, "in_stock": false},
+    {"id": 103, "name": "Doohickey", "price": 9.99, "in_stock": true}
+  ]
+}`,
+
+  repeat: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world`,
+};
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const text = PRESETS[btn.dataset.preset];
+    if (text) {
+      document.getElementById('input-text').value = text;
+      document.getElementById('run-label').value = btn.dataset.preset;
+      updateCharCount();
+    }
+  });
+});
+
+const inputText = document.getElementById('input-text');
+function updateCharCount() {
+  const n = inputText.value.length;
+  document.getElementById('char-count').textContent = `${n.toLocaleString()} chars`;
+}
+inputText.addEventListener('input', updateCharCount);
+updateCharCount();
+
+// ── Terminal ───────────────────────────────────────────────────────────────
+
+const terminal = document.getElementById('terminal');
+let autoScroll = true;
+
+terminal.addEventListener('scroll', () => {
+  autoScroll = terminal.scrollTop + terminal.clientHeight >= terminal.scrollHeight - 20;
+});
+
+function termLine(text, cls = '') {
+  const span = document.createElement('span');
+  span.className = 'term-line' + (cls ? ' ' + cls : '');
+  span.textContent = text;
+  terminal.appendChild(span);
+  terminal.appendChild(document.createTextNode('\n'));
+  if (autoScroll) scrollTerminalBottom();
+}
+
+function scrollTerminalBottom() {
+  terminal.scrollTop = terminal.scrollHeight;
+  autoScroll = true;
+}
+
+function clearTerminal() {
+  terminal.innerHTML = '<span class="term-line dim">// cleared.\n</span>';
+}
+
+function classifyLine(line) {
+  if (line.includes('✓') || line.includes('PASS') || line.includes('ALL TESTS PASSED')) return 'success';
+  if (line.includes('✗') || line.includes('FAIL') || line.includes('Error') || line.includes('Traceback')) return 'error';
+  if (line.includes('Warning') || line.includes('deprecated')) return 'warn';
+  if (line.includes('Loading') || line.includes('Using device') || line.includes('Model loaded')) return 'info';
+  if (line.includes('===') || line.includes('BENCHMARK') || line.includes('SUMMARY')) return 'result';
+  if (line.trim() === '' || line.includes('---')) return 'dim';
+  return '';
+}
+
+// ── Run ────────────────────────────────────────────────────────────────────
+
+let _runActive = false;
+
+function startRun() {
+  if (_runActive) return;
+
+  const text = document.getElementById('input-text').value.trim();
+  const label = document.getElementById('run-label').value.trim() || 'custom';
+
+  if (!text) { termLine('// no text provided', 'error'); return; }
+
+  _runActive = true;
+  switchTab('terminal', document.querySelector('.tab'));
+
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('stop-btn').style.display = 'inline-block';
+  document.getElementById('progress-wrap').classList.add('visible');
+  setStatus('running');
+
+  termLine(`// starting run: "${label}"`, 'info');
+  termLine(`// input: ${text.length} chars`, 'dim');
+  termLine('', '');
+
+  const ctrl = new AbortController();
+  window._runAbort = ctrl;
+
+  fetch('/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, label }),
+    signal: ctrl.signal,
+  }).then(async res => {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+
+      for (const part of parts) {
+        const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+        if (!dataLine) continue;
+        try {
+          const msg = JSON.parse(dataLine.slice(6));
+          handleSSE(msg, label);
+
+          // parse tqdm progress from log lines
+          if (msg.type === 'log') {
+            const m = msg.text.match(/(\d+)\/(\d+)/);
+            if (m) {
+              tokenDone = parseInt(m[1]);
+              tokenTotal = parseInt(m[2]);
+              const pct = tokenTotal > 0 ? (tokenDone / tokenTotal * 100) : 0;
+              document.getElementById('progress-fill').style.width = pct + '%';
+
+              const tpsMatch = msg.text.match(/([\d.]+)it\/s/);
+              if (tpsMatch) {
+                document.getElementById('progress-tps').textContent = parseFloat(tpsMatch[1]).toFixed(1) + ' tok/s';
+              }
+
+              const phaseMatch = msg.text.match(/LLM (encoding|decoding)/i) || msg.text.match(/(Compressing|Decompressing)/i);
+              if (phaseMatch) {
+                document.getElementById('progress-phase').textContent = phaseMatch[0].toLowerCase();
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  }).catch(e => {
+    if (e.name !== 'AbortError') termLine(`// error: ${e.message}`, 'error');
+  }).finally(() => {
+    runFinished();
+  });
+}
+
+function handleSSE(msg, label) {
+  if (msg.type === 'log') {
+    termLine(msg.text, classifyLine(msg.text));
+  } else if (msg.type === 'result') {
+    updateMetrics(msg.data);
+    loadHistory();
+    loadCharts();
+  } else if (msg.type === 'done') {
+    termLine('', '');
+    termLine('// run complete', 'success');
+  } else if (msg.type === 'error') {
+    termLine(`// error: ${msg.text}`, 'error');
+  }
+}
+
+function runFinished() {
+  _runActive = false;
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('stop-btn').style.display = 'none';
+  document.getElementById('progress-fill').style.width = '100%';
+  setTimeout(() => {
+    document.getElementById('progress-wrap').classList.remove('visible');
+    document.getElementById('progress-fill').style.width = '0%';
+  }, 1500);
+  setStatus('idle');
+}
+
+function stopRun() {
+  if (window._runAbort) window._runAbort.abort();
+  fetch('/stop', { method: 'POST' });
+  termLine('// run stopped by user', 'warn');
+  runFinished();
+}
+
+// ── Metrics ────────────────────────────────────────────────────────────────
+
+function updateMetrics(d) {
+  const ratio = d.llm_zstd_ratio || 0;
+  const zlib = d.zlib_ratio || 0;
+  const delta = ratio - zlib;
+
+  document.getElementById('m-ratio').textContent = ratio.toFixed(1) + '%';
+  document.getElementById('m-delta').textContent = (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%';
+  document.getElementById('m-delta').className = 'metric-value ' + (delta < 0 ? 'win' : 'lose');
+  document.getElementById('m-delta-sub').textContent = delta < 0 ? '🎉 beats zlib' : 'zlib still ahead';
+  document.getElementById('m-ctps').textContent = (d.llm_tps || d.compression_tps || 0).toFixed(1);
+  document.getElementById('m-dtps').textContent = (d.decompress_tps || d.decompression_tps || 0).toFixed(1);
+  document.getElementById('m-tokens').textContent = d.token_count || '—';
+
+  const pass = d.lossless_verified !== false;
+  document.getElementById('m-pass').textContent = pass ? 'PASS' : 'FAIL';
+  document.getElementById('m-pass').className = 'metric-value ' + (pass ? 'win' : 'lose');
+
+  // bars
+  const max = Math.max(ratio, zlib, d.zstd_only_ratio || 0, 10);
+  setBar('bar-llm', ratio, max, ratio.toFixed(1) + '%');
+  setBar('bar-zstd', d.zstd_only_ratio || 0, max, (d.zstd_only_ratio || 0).toFixed(1) + '%');
+  setBar('bar-zlib', zlib, max, zlib.toFixed(1) + '%');
+}
+
+function setBar(id, val, max, label) {
+  const el = document.getElementById(id);
+  el.style.width = Math.max(3, (val / max) * 100) + '%';
+  el.textContent = label;
+}
+
+// ── Status ─────────────────────────────────────────────────────────────────
+
+function setStatus(state) {
+  const badge = document.getElementById('status-badge');
+  badge.className = 'badge' + (state === 'running' ? ' running' : '');
+  badge.innerHTML = `<span class="dot"></span>${state}`;
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  // find correct tab button
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.textContent.trim() === name) t.classList.add('active');
+  });
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+
+async function loadHistory() {
+  const res = await fetch('/history');
+  const rows = await res.json();
+  const container = document.getElementById('history-container');
+
+  if (!rows.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">◈</div>No runs yet.</div>';
+    return;
+  }
+
+  const bestRatio = Math.min(...rows.filter(r => r.passed).map(r => r.llm_ratio));
+  const bestTps = Math.max(...rows.map(r => r.compress_tps));
+
+  let html = `<table class="history-table">
+    <thead><tr>
+      <th>time</th><th>label</th><th>tokens</th>
+      <th>llm+zstd</th><th>zlib</th><th>delta</th>
+      <th>tok/s</th><th>lossless</th>
+    </tr></thead><tbody>`;
+
+  for (const r of rows) {
+    const delta = r.llm_ratio - r.zlib_ratio;
+    const isBestRatio = r.llm_ratio === bestRatio && r.passed;
+    const isBestTps = r.compress_tps === bestTps;
+    const ts = r.timestamp ? r.timestamp.slice(0, 16).replace('T', ' ') : '—';
+
+    html += `<tr>
+      <td style="color:var(--muted);font-size:11px">${ts}</td>
+      <td>${r.label || '—'}</td>
+      <td>${r.token_count}</td>
+      <td class="${isBestRatio ? 'best' : ''}">${r.llm_ratio.toFixed(1)}%</td>
+      <td style="color:var(--muted)">${r.zlib_ratio.toFixed(1)}%</td>
+      <td class="${delta < 0 ? 'best' : 'worst'}">${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%</td>
+      <td class="${isBestTps ? 'best' : ''}">${r.compress_tps.toFixed(1)}</td>
+      <td><span class="pass-badge ${r.passed ? 'pass' : 'fail'}">${r.passed ? 'PASS' : 'FAIL'}</span></td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+
+let charts = {};
+
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: true,
+  plugins: {
+    legend: { labels: { color: '#6b6b8a', font: { family: 'JetBrains Mono', size: 10 } } }
+  },
+  scales: {
+    x: { ticks: { color: '#6b6b8a', font: { size: 10 } }, grid: { color: '#1e1e2e' } },
+    y: { ticks: { color: '#6b6b8a', font: { size: 10 } }, grid: { color: '#1e1e2e' } }
+  }
+};
+
+async function loadCharts() {
+  const res = await fetch('/history');
+  const rows = await res.json();
+  if (!rows.length) return;
+
+  const recent = rows.slice(0, 20).reverse();
+  const labels = recent.map(r => r.label || r.timestamp?.slice(11, 16) || '');
+
+  // Ratio over time
+  renderChart('chart-ratio', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'LLM+zstd',
+          data: recent.map(r => r.llm_ratio),
+          borderColor: '#7c6aff',
+          backgroundColor: 'rgba(124,106,255,0.08)',
+          tension: 0.3, fill: true, pointRadius: 3,
+        },
+        {
+          label: 'zlib',
+          data: recent.map(r => r.zlib_ratio),
+          borderColor: '#2e2e4e',
+          borderDash: [4, 3],
+          tension: 0.3, pointRadius: 2,
+        }
+      ]
+    },
+    options: { ...CHART_DEFAULTS, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, title: { display: true, text: '% of original', color: '#6b6b8a', font: { size: 10 } } } } }
+  });
+
+  // TPS over time
+  renderChart('chart-tps', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'compress tok/s',
+        data: recent.map(r => r.compress_tps),
+        borderColor: '#3dffb0',
+        backgroundColor: 'rgba(61,255,176,0.08)',
+        tension: 0.3, fill: true, pointRadius: 3,
+      }, {
+        label: 'decompress tok/s',
+        data: recent.map(r => r.decompress_tps),
+        borderColor: '#ffd700',
+        backgroundColor: 'rgba(255,215,0,0.05)',
+        tension: 0.3, fill: false, pointRadius: 3,
+      }]
+    },
+    options: CHART_DEFAULTS,
+  });
+
+  // Compare bar
+  const last10 = rows.slice(0, 10).reverse();
+  renderChart('chart-compare', {
+    type: 'bar',
+    data: {
+      labels: last10.map(r => r.label || '?'),
+      datasets: [
+        { label: 'LLM+zstd', data: last10.map(r => r.llm_ratio), backgroundColor: 'rgba(124,106,255,0.7)', borderRadius: 3 },
+        { label: 'zlib', data: last10.map(r => r.zlib_ratio), backgroundColor: 'rgba(46,46,78,0.7)', borderRadius: 3 },
+      ]
+    },
+    options: CHART_DEFAULTS,
+  });
+
+  // Bytes chart
+  renderChart('chart-bytes', {
+    type: 'bar',
+    data: {
+      labels: last10.map(r => r.label || '?'),
+      datasets: [
+        { label: 'original', data: last10.map(r => r.original_bytes), backgroundColor: 'rgba(107,107,138,0.5)', borderRadius: 3 },
+        { label: 'compressed', data: last10.map(r => r.compressed_bytes), backgroundColor: 'rgba(255,106,155,0.7)', borderRadius: 3 },
+      ]
+    },
+    options: CHART_DEFAULTS,
+  });
+}
+
+function renderChart(id, config) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, config);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+loadHistory();
+loadCharts();
+
+// Poll status
+setInterval(async () => {
+  const res = await fetch('/status');
+  const { active } = await res.json();
+  if (!active && document.getElementById('run-btn').disabled) {
+    // run finished externally
+    runFinished();
+  }
+}, 3000);
+</script>
+</body>
+</html>

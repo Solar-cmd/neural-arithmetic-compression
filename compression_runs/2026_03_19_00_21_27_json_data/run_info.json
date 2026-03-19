@@ -1,0 +1,17 @@
+{
+  "label": "JSON Data",
+  "timestamp": "2026_03_19_00_21_27",
+  "model": "distilgpt2",
+  "original_size_bytes": 562,
+  "llm_zstd_size_bytes": 228,
+  "llm_zstd_ratio_percent": 40.57,
+  "zlib_size_bytes": 213,
+  "zlib_ratio_percent": 37.9,
+  "zstd_only_ratio_percent": 38.97,
+  "compression_tps": 78.61,
+  "decompression_tps": 80.22,
+  "token_count": 238,
+  "lossless_verified": true,
+  "diff_status": "IDENTICAL \u2014 perfect lossless reconstruction",
+  "llm_beats_zlib": false
+}

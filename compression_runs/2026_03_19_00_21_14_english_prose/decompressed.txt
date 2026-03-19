@@ -1,0 +1,7 @@
+The quick brown fox jumps over the lazy dog. This is a classic pangram that contains
+every letter of the English alphabet at least once. It is often used for testing
+fonts and keyboards because it displays all characters in a short, memorable phrase.
+The sentence has been used since the late 19th century and continues to be popular
+today for various applications including typing practice and font previews.
+In addition to its practical uses, pangrams like this one are simply fun to read
+and demonstrate the flexibility and richness of the English language.

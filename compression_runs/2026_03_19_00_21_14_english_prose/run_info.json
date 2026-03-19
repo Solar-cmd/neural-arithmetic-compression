@@ -1,0 +1,17 @@
+{
+  "label": "English Prose",
+  "timestamp": "2026_03_19_00_21_14",
+  "model": "distilgpt2",
+  "original_size_bytes": 560,
+  "llm_zstd_size_bytes": 232,
+  "llm_zstd_ratio_percent": 41.43,
+  "zlib_size_bytes": 344,
+  "zlib_ratio_percent": 61.43,
+  "zstd_only_ratio_percent": 62.68,
+  "compression_tps": 45.56,
+  "decompression_tps": 80.67,
+  "token_count": 113,
+  "lossless_verified": true,
+  "diff_status": "IDENTICAL \u2014 perfect lossless reconstruction",
+  "llm_beats_zlib": true
+}

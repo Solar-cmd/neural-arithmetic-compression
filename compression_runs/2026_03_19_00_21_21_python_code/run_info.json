@@ -1,0 +1,17 @@
+{
+  "label": "Python Code",
+  "timestamp": "2026_03_19_00_21_21",
+  "model": "distilgpt2",
+  "original_size_bytes": 566,
+  "llm_zstd_size_bytes": 266,
+  "llm_zstd_ratio_percent": 47.0,
+  "zlib_size_bytes": 254,
+  "zlib_ratio_percent": 44.88,
+  "zstd_only_ratio_percent": 45.23,
+  "compression_tps": 77.09,
+  "decompression_tps": 78.59,
+  "token_count": 292,
+  "lossless_verified": true,
+  "diff_status": "IDENTICAL \u2014 perfect lossless reconstruction",
+  "llm_beats_zlib": false
+}
