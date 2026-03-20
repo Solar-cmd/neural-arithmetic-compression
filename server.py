@@ -16,7 +16,6 @@ import tempfile
 from datetime import datetime
 from flask import Flask, Response, request, jsonify, send_from_directory
 
-# Always resolve paths relative to this file's directory
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__, static_folder=PROJECT_DIR)
@@ -159,41 +158,39 @@ def run_benchmark():
 
     def stream():
         current_run["active"] = True
+        tmp_path = None
+        script_path = None
         try:
-            # Write input text to temp file
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".txt", delete=False, encoding="utf-8",
-                dir=PROJECT_DIR
-            ) as f:
+            # Write input text to temp file in project dir
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".txt", dir=PROJECT_DIR)
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 f.write(text)
-                tmp_path = f.name
 
-            # Inline script — PROJECT_DIR and tmp_path are injected as string literals
-            script_lines = [
-                "import sys, os",
-                f"sys.path.insert(0, {repr(PROJECT_DIR)})",
-                f"os.chdir({repr(PROJECT_DIR)})",
-                "from compressor import LLMTextCompressor, benchmark",
-                "import json",
-                f"compressor = LLMTextCompressor(model_name='distilgpt2', context_window=512, zstd_level=19)",
-                f"text = open({repr(tmp_path)}, encoding='utf-8').read()",
-                f"result = benchmark(text, compressor, {repr(label)}, save=True)",
-                "if result:",
-                f"    result['input_text'] = text",
-                f"    result['label'] = {repr(label)}",
-                "    result['lossless_verified'] = True",
-                "    print('__RESULT__:' + json.dumps(result))",
-                f"os.unlink({repr(tmp_path)})",
-            ]
-            script = "\n".join(script_lines)
+            # Write a real .py file — avoids -c quoting issues entirely
+            script_path = os.path.join(PROJECT_DIR, "_dashboard_run.py")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write("import sys, os\n")
+                f.write("sys.path.insert(0, " + repr(PROJECT_DIR) + ")\n")
+                f.write("os.chdir(" + repr(PROJECT_DIR) + ")\n")
+                f.write("from compressor import LLMTextCompressor, benchmark\n")
+                f.write("import json\n")
+                f.write("compressor = LLMTextCompressor(model_name='distilgpt2', context_window=512, zstd_level=19)\n")
+                f.write("text = open(" + repr(tmp_path) + ", encoding='utf-8').read()\n")
+                f.write("result = benchmark(text, compressor, " + repr(label) + ", save=True)\n")
+                f.write("if result:\n")
+                f.write("    result['input_text'] = text\n")
+                f.write("    result['label'] = " + repr(label) + "\n")
+                f.write("    result['lossless_verified'] = True\n")
+                f.write("    print('__RESULT__:' + json.dumps(result))\n")
 
             proc = subprocess.Popen(
-                [sys.executable, "-c", script],
+                [sys.executable, script_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
                 cwd=PROJECT_DIR,
+                env={**os.environ, "PYTHONPATH": PROJECT_DIR},
             )
             current_run["pid"] = proc.pid
 
@@ -201,23 +198,32 @@ def run_benchmark():
             for line in proc.stdout:
                 line = line.rstrip()
                 if line.startswith("__RESULT__:"):
-                    result_data = json.loads(line[len("__RESULT__:"):])
+                    try:
+                        result_data = json.loads(line[len("__RESULT__:"):])
+                    except Exception:
+                        pass
                 else:
-                    yield f"data: {json.dumps({'type': 'log', 'text': line})}\n\n"
+                    yield "data: " + json.dumps({"type": "log", "text": line}) + "\n\n"
 
             proc.wait()
 
             if result_data:
                 save_run(result_data)
-                yield f"data: {json.dumps({'type': 'result', 'data': result_data})}\n\n"
+                yield "data: " + json.dumps({"type": "result", "data": result_data}) + "\n\n"
 
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield "data: " + json.dumps({"type": "done"}) + "\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'text': str(e)})}\n\n"
+            yield "data: " + json.dumps({"type": "error", "text": str(e)}) + "\n\n"
         finally:
             current_run["active"] = False
             current_run["pid"] = None
+            for p in [tmp_path, script_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.unlink(p)
+                    except Exception:
+                        pass
 
     return Response(
         stream(),
@@ -234,6 +240,12 @@ if __name__ == "__main__":
     print(f"Compressor:  {os.path.join(PROJECT_DIR, 'compressor.py')}")
     print(f"Dashboard:   {os.path.join(PROJECT_DIR, 'dashboard.html')}")
     print(f"Database:    {DB_PATH}")
+    print()
+    # Verify compressor.py actually exists
+    if not os.path.exists(os.path.join(PROJECT_DIR, "compressor.py")):
+        print("WARNING: compressor.py not found in project dir!")
+    else:
+        print("compressor.py found OK")
     print("\nStarting dashboard on http://127.0.0.1:5000")
     threading.Timer(1.5, lambda: webbrowser.open("http://127.0.0.1:5000")).start()
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
