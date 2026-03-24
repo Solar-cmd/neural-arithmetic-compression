@@ -1,5 +1,7 @@
 # Neural Arithmetic Compression
 
+A python implementation of https://bellard.org/nncp/
+
 A neural text compressor that combines Large Language Models (LLMs) with arithmetic coding to achieve lossless text compression. This innovative approach uses the LLM's next-token probabilities as the probability model for arithmetic coding, enabling tokens that the model predicts confidently to be encoded in fewer bits.
 
 Unlike traditional compression algorithms (like zlib/zstd) that rely on statistical patterns in the text, this compressor leverages the predictive power of modern LLMs. The LLM predicts the next token and provides probability distributions over the entire vocabulary. These probabilities are fed into an arithmetic coder, where predicted tokens are encoded using fewer bits. The same LLM is used to generate identical probability distributions (since arithmetic coding doesn't introduce errors), allowing perfect reconstruction of the original text. From testing it is shown that all texts can be recreated with perfect accuarcy. However, for text with irregular patterns (eg: Random strings/dauhwdyfubkjsnfaikbwd), this may not be the case.
