@@ -1,0 +1,7 @@
+torch
+transformers
+constriction==0.4.2
+zstandard
+tqdm
+numpy
+flask
